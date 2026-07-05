@@ -1,0 +1,160 @@
+# TASK3 — 双均线策略量化分析 Spec
+# 版本: 1.0
+# 日期: 2026-07-05
+
+spec:
+  name: "双均线策略实现与回测"
+  version: "1.0"
+  objectives:
+    - "理解双均线策略核心概念（金叉/死叉）"
+    - "掌握量化策略基础评价指标（最大回撤、夏普比率、累计回报）"
+    - "Python 完整实现：数据加载 → 信号生成 → 可视化 → 回测 → 指标计算"
+    - "多股票、多周期对比实验，总结策略适用场景"
+
+  # ── 阶段 1: 理论基础 ──────────────────────────────────
+
+  phase1_concepts:
+    dual_ma_strategy:
+      description: "双均线策略是最经典的趋势跟踪策略之一，利用短期均线与长期均线的交叉关系判断买卖时机"
+      golden_cross:
+        name: "金叉 (Golden Cross)"
+        definition: "短期均线从下方向上穿越长期均线"
+        signal: "买入信号"
+        logic: "短期价格趋势强于长期趋势，表明上涨动能增强，趋势可能转向多头"
+      death_cross:
+        name: "死叉 (Death Cross)"
+        definition: "短期均线从上方向下穿越长期均线"
+        signal: "卖出信号"
+        logic: "短期价格趋势弱于长期趋势，表明下跌动能增强，趋势可能转向空头"
+
+    metrics:
+      - name: "最大回撤 (MDD / Max Drawdown)"
+        formula: "MDD = max((P_t - P_peak) / P_peak), 对所有 t"
+        description: "在选定周期内，从净值最高点到后续最低点的最大跌幅百分比"
+        significance: "衡量策略的最大风险承受能力，值越小越好"
+      - name: "夏普比率 (Sharpe Ratio)"
+        formula: "Sharpe = (R_p - R_f) / σ_p，其中 R_f 取 0（简化）"
+        description: "单位风险所获得的超额回报，衡量风险调整后收益"
+        significance: ">1 为可接受，>2 为优秀，>3 为卓越"
+      - name: "累计回报 (Cumulative Return)"
+        formula: "CR = (期末净值 - 期初净值) / 期初净值 × 100%"
+        description: "策略在整个回测期间的总收益率"
+        significance: "最直观的收益指标，但需结合 MDD 和 Sharpe 综合评估"
+      - name: "年化收益率 (Annualized Return)"
+        formula: "AR = (1 + CR)^(252/N) - 1, N 为交易天数"
+        description: "将累计回报折算为年度等价收益率"
+      - name: "胜率 (Win Rate)"
+        formula: "WR = 盈利交易次数 / 总交易次数 × 100%"
+        description: "所有交易中盈利交易的比例"
+
+  # ── 阶段 2: 数据 ──────────────────────────────────────
+
+  phase2_data:
+    source: "TASK3/data/standard/{symbol}/1d.parquet"
+    stocks:
+      - symbol: "002594.SZ"
+        name: "比亚迪 (A)"
+      - symbol: "600900.SH"
+        name: "长江电力 (A)"
+      - symbol: "688981.SH"
+        name: "中芯国际 (A)"
+      - symbol: "688099.SH"
+        name: "晶晨股份 (A)"
+      - symbol: "00981.HK"
+        name: "中芯国际 (H)"
+      - symbol: "01211.HK"
+        name: "比亚迪 (H)"
+    price_column: "close"
+    note: "所有数据已做前复权处理"
+
+  # ── 阶段 3: Python 实现 ──────────────────────────────
+
+  phase3_implementation:
+    step1_data_loading:
+      description: "从 TASK3/data/standard/ 加载指定股票的 Parquet 文件"
+      input: "symbol (e.g. 002594.SZ)"
+      output: "DataFrame with trade_date, close (前复权)"
+    step2_ma_calculation:
+      description: "计算短期和长期移动平均线"
+      parameters:
+        short_window:
+          default: 5
+          range: "3~20"
+          description: "短期均线周期（交易日）"
+        long_window:
+          default: 15
+          range: "10~60"
+          description: "长期均线周期（交易日）"
+      method: "df['ma_short'] = df['close'].rolling(short_window).mean()"
+      constraint: "short_window < long_window"
+    step3_signal_generation:
+      description: "基于 MA 交叉生成交易信号"
+      signal_types:
+        - value: 1
+          label: "买入 (Buy)"
+          condition: "ma_short 上穿 ma_long (前一日 short < long，当日 short > long)"
+        - value: -1
+          label: "卖出 (Sell)"
+          condition: "ma_short 下穿 ma_long (前一日 short > long，当日 short < long)"
+        - value: 0
+          label: "持有 (Hold)"
+          condition: "无交叉发生"
+      position_logic: "首次买入前无持仓，卖出后为空仓，买入后为满仓（不允许做空）"
+    step4_visualization:
+      description: "绘制交互式图表，matplotlib 静态图或 plotly 交互图"
+      elements:
+        - "主图：前复权收盘价折线 (黑色)"
+        - "叠加：短期均线 MA_short (橙色虚线)"
+        - "叠加：长期均线 MA_long (蓝色虚线)"
+        - "标注：买入信号 = 红色▲ (上三角形)"
+        - "标注：卖出信号 = 绿色▼ (下三角形)"
+        - "副图：累计收益率曲线"
+      output_format: "PNG (高分辨率) 或 HTML (交互式)"
+    step5_backtest:
+      description: "模拟交易并计算策略指标"
+      assumptions:
+        - "初始资金: 100,000"
+        - "交易成本: 不考虑（简化）"
+        - "滑点: 不考虑（简化）"
+        - "交易信号以收盘价执行"
+        - "单边做多，不可做空"
+      output_metrics:
+        - "累计回报率 (Cumulative Return)"
+        - "年化收益率 (Annualized Return)"
+        - "最大回撤 (MDD)"
+        - "夏普比率 (Sharpe Ratio)"
+        - "胜率 (Win Rate)"
+        - "总交易次数"
+        - "买入持有策略收益率 (Buy & Hold) — 基准对比"
+
+  # ── 阶段 4: 多场景对比实验 ────────────────────────────
+
+  phase4_experiments:
+    description: "遍历不同股票 × 不同均线周期组合，生成对比矩阵"
+    stock_list:
+      - "002594.SZ (比亚迪A)"
+      - "600900.SH (长江电力)"
+      - "688981.SH (中芯国际A)"
+      - "688099.SH (晶晨股份)"
+      - "00981.HK (中芯国际H)"
+      - "01211.HK (比亚迪H)"
+    ma_combinations:
+      - [5, 15]
+      - [5, 20]
+      - [5, 30]
+      - [10, 30]
+      - [10, 60]
+      - [20, 60]
+    output:
+      - "TASK3/backtest_matrix.csv — 全量对比矩阵"
+      - "TASK3/backtest_best.html — 最佳策略详情图"
+
+  # ── 阶段 5: 分析总结 ──────────────────────────────────
+
+  phase5_summary:
+    topics:
+      - "双均线策略在趋势明显股票（如比亚迪）vs 震荡市股票 的表现差异"
+      - "短周期 vs 长周期参数对交易频率和胜率的影响"
+      - "策略在不同市场（A股 vs H股）的表现对比"
+      - "策略的局限性：滞后性、震荡市假信号、单边市表现"
+      - "改进方向：加入成交量确认、均线斜率、ADX 趋势强度过滤"
