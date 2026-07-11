@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>海龟策略交互实验工具 — TASK4</title>
+<script src="lib/chart.umd.min.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif; background: #f5f7fa; color: #333; }
+.header { background: linear-gradient(135deg, #1a237e 0%, #283593 100%); color: white; padding: 16px 24px; }
+.header h1 { font-size: 20px; font-weight: 600; }
+.header p { font-size: 12px; opacity: 0.8; margin-top: 4px; }
+.container { max-width: 1400px; margin: 0 auto; padding: 16px; display: flex; gap: 16px; }
+.panel { background: white; border-radius: 8px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+.control-panel { width: 280px; flex-shrink: 0; display: flex; flex-direction: column; gap: 12px; }
+.control-panel h3 { font-size: 14px; color: #1a237e; margin-bottom: 2px; }
+.control-panel label { font-size: 12px; color: #666; display: block; margin-bottom: 4px; }
+.control-panel select, .control-panel input[type="range"] { width: 100%; }
+.control-panel input[type="range"] { accent-color: #1a237e; }
+.range-value { font-size: 12px; color: #1a237e; font-weight: 600; float: right; }
+.range-info { font-size: 11px; color: #999; margin-top: 2px; }
+button { padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; }
+.btn-run { background: #1a237e; color: white; width: 100%; padding: 10px; }
+.btn-run:hover { background: #283593; }
+.btn-run:disabled { background: #ccc; cursor: not-allowed; }
+.main-chart { flex: 1; min-width: 0; }
+.main-chart h3 { font-size: 14px; color: #1a237e; margin-bottom: 8px; }
+.chart-wrapper { position: relative; height: 400px; margin-bottom: 12px; }
+.nav-wrapper { height: 200px; }
+.metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 12px; }
+.metric-card { background: linear-gradient(135deg, #e8eaf6, #c5cae9); border-radius: 6px; padding: 10px; text-align: center; }
+.metric-card .label { font-size: 11px; color: #666; }
+.metric-card .value { font-size: 20px; font-weight: 700; color: #1a237e; }
+.metric-card.good .value { color: #c62828; }
+.metric-card.warn .value { color: #e65100; }
+.trade-log { max-height: 200px; overflow-y: auto; font-size: 11px; margin-top: 8px; }
+.trade-log table { width: 100%; border-collapse: collapse; }
+.trade-log th { background: #e8eaf6; padding: 4px 6px; text-align: left; font-size: 11px; position: sticky; top: 0; }
+.trade-log td { padding: 3px 6px; border-bottom: 1px solid #eee; }
+.trade-log .buy { color: #c62828; }
+.trade-log .sell { color: #2e7d32; }
+.status { font-size: 12px; color: #999; text-align: center; padding: 8px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🐢 海龟交易策略 — 交互实验工具</h1>
+  <p>TASK4 · 王艳鹏 · 回测参数可实时调节</p>
+</div>
+
+<div class="container">
+  <!-- 控制面板 -->
+  <div class="panel control-panel">
+    <h3>🎯 选择标的</h3>
+    <select id="stockSelect">
+      <option value="002594.SZ">002594.SZ 比亚迪 (A股)</option>
+      <option value="600900.SH">600900.SH 长江电力 (A股)</option>
+      <option value="688981.SH">688981.SH 中芯国际 (A股)</option>
+      <option value="688099.SH">688099.SH 晶晨股份 (A股)</option>
+      <option value="00981.HK">00981.HK 中芯国际 (H股)</option>
+      <option value="01211.HK">01211.HK 比亚迪 (H股)</option>
+    </select>
+
+    <h3>📊 通道周期</h3>
+    <label>入场通道<span class="range-value" id="chVal">20</span>天</label>
+    <input type="range" id="channelPeriod" min="5" max="60" value="20" step="1">
+    <div class="range-info">系统一=20, 系统二=55</div>
+
+    <h3>🚪 退出通道</h3>
+    <label>退出通道<span class="range-value" id="exVal">10</span>天</label>
+    <input type="range" id="exitPeriod" min="5" max="30" value="10" step="1">
+    <div class="range-info">系统一=10, 系统二=20</div>
+
+    <h3>📏 ATR 周期</h3>
+    <label>ATR<span class="range-value" id="atrVal">14</span>天</label>
+    <input type="range" id="atrPeriod" min="7" max="30" value="14" step="1">
+
+    <h3>💰 风险预算</h3>
+    <label>风险<span class="range-value" id="riskVal">1.0</span>%</label>
+    <input type="range" id="riskPct" min="0.5" max="3" value="1" step="0.1">
+    <div class="range-info">Unit = (100,000 × 风险%) / ATR</div>
+
+    <h3>🔺 金字塔加仓</h3>
+    <select id="pyramidToggle">
+      <option value="true" selected>启用 (最多4Unit)</option>
+      <option value="false">禁用 (单次全仓)</option>
+    </select>
+
+    <button class="btn-run" id="runBtn" onclick="runBacktest()">▶ 运行回测</button>
+    <div class="status" id="status"></div>
+  </div>
+
+  <!-- 图表区 -->
+  <div class="panel main-chart">
+    <h3 id="chartTitle">K线图 + Donchian 通道 + 交易信号</h3>
+    <div class="chart-wrapper"><canvas id="klineChart"></canvas></div>
+    <h3 style="margin-top:12px;">策略净值 vs 买入持有</h3>
+    <div class="nav-wrapper"><canvas id="navChart"></canvas></div>
+    <div class="metrics" id="metricsPanel"></div>
+    <div class="trade-log" id="tradeLog"></div>
+  </div>
+</div>
+
+<script>
+// ── 全局状态 ──
+let stockData = {};
+let currentSymbol = '';
+let klineChart = null, navChart = null;
+
+// ── 滑块绑定 ──
+['channelPeriod','exitPeriod','atrPeriod','riskPct'].forEach(id => {
+  document.getElementById(id).addEventListener('input', function() {
+    const key = id === 'channelPeriod' ? 'chVal' : id === 'exitPeriod' ? 'exVal' :
+               id === 'atrPeriod' ? 'atrVal' : 'riskVal';
+    document.getElementById(key).textContent = id === 'riskPct' ? parseFloat(this.value).toFixed(1) : this.value;
+  });
+});
+
+// ── 数据加载 ──
+async function loadStockData(symbol) {
+  if (stockData[symbol]) return stockData[symbol];
+  setStatus(`正在加载 ${symbol} 数据...`);
+  const resp = await fetch(`data/${symbol}.json`);
+  const data = await resp.json();
+  stockData[symbol] = data;
+  setStatus(`${symbol} 数据加载完成 (${data.length}行)`);
+  return data;
+}
+
+function setStatus(msg) {
+  document.getElementById('status').textContent = msg;
+}
+
+// ── 核心计算 ──
+function calcIndicators(raw, params) {
+  const { channelPeriod, exitPeriod, atrPeriod } = params;
+  const n = raw.length;
+
+  const dates = raw.map(r => r.d);
+  const opens = raw.map(r => r.o);
+  const highs = raw.map(r => r.h);
+  const lows = raw.map(r => r.l);
+  const closes = raw.map(r => r.c);
+  const vols = raw.map(r => r.v);
+
+  // Donchian
+  const upper = new Array(n).fill(null);
+  const lower = new Array(n).fill(null);
+  const mid = new Array(n).fill(null);
+  const exitLower = new Array(n).fill(null);
+
+  for (let i = channelPeriod - 1; i < n; i++) {
+    let maxH = -Infinity, minL = Infinity;
+    for (let j = i - channelPeriod + 1; j <= i; j++) { maxH = Math.max(maxH, highs[j]); minL = Math.min(minL, lows[j]); }
+    upper[i] = maxH; lower[i] = minL; mid[i] = (maxH + minL) / 2;
+  }
+  for (let i = exitPeriod - 1; i < n; i++) {
+    let minL = Infinity;
+    for (let j = i - exitPeriod + 1; j <= i; j++) minL = Math.min(minL, lows[j]);
+    exitLower[i] = minL;
+  }
+
+  // ATR
+  const tr = new Array(n).fill(null);
+  const atr = new Array(n).fill(null);
+  for (let i = 1; i < n; i++) {
+    tr[i] = Math.max(highs[i] - lows[i], Math.abs(highs[i] - closes[i-1]), Math.abs(lows[i] - closes[i-1]));
+  }
+  let trSum = 0;
+  for (let i = 1; i < atrPeriod; i++) trSum += (tr[i] || tr[i-1] || 0);
+  for (let i = atrPeriod; i < n; i++) {
+    if (i === atrPeriod) {
+      for (let j = 1; j <= atrPeriod; j++) trSum += (tr[j] || tr[atrPeriod-1] || 0);
+      atr[i] = trSum / atrPeriod;
+    } else {
+      trSum -= (tr[i - atrPeriod] || 0);
+      trSum += (tr[i] || 0);
+      atr[i] = trSum / atrPeriod;
+    }
+  }
+  // Fill initial ATR values
+  for (let i = 1; i < atrPeriod; i++) atr[i] = atr[atrPeriod] || 1;
+
+  return { dates, opens, highs, lows, closes, vols, upper, lower, mid, exitLower, tr, atr };
+}
+
+// ── 回测引擎 ──
+function runBacktestEngine(raw, params) {
+  const { channelPeriod, exitPeriod, riskPct, enablePyramid, maxUnits } = params;
+  const ind = calcIndicators(raw, params);
+  const { dates, highs, lows, closes, upper, exitLower, atr } = ind;
+  const n = raw.length;
+  const accountValue = 100000;
+  const riskAmount = accountValue * (riskPct / 100);
+  const warmup = Math.max(channelPeriod, params.atrPeriod);
+
+  let cash = accountValue, shares = 0, unitsHeld = 0, entryPrice = 0;
+  const signals = new Array(n).fill(0);
+  const navs = new Array(n).fill(accountValue);
+  const positions = new Array(n).fill(0);
+  const trades = [];
+
+  for (let i = warmup; i < n; i++) {
+    const price = closes[i];
+    const atrVal = atr[i];
+    const upperPrev = upper[i-1];
+    const exitLowerPrev = exitLower[i-1];
+
+    if (!upperPrev || !atrVal || atrVal <= 0) { navs[i] = cash + shares * price; continue; }
+
+    const unitSize = Math.floor(riskAmount / atrVal);
+    if (unitSize <= 0) { navs[i] = cash + shares * price; continue; }
+
+    let signal = 0;
+
+    if (unitsHeld > 0) {
+      // 止损
+      const stopPrice = entryPrice - 2 * atrVal;
+      if (lows[i] <= stopPrice) {
+        const exitPrice = Math.min(opens[i], stopPrice);
+        cash += shares * exitPrice;
+        trades.push({ date: dates[i], type: '止损', price: exitPrice.toFixed(2), pct: ((exitPrice/entryPrice - 1)*100).toFixed(1) });
+        shares = 0; unitsHeld = 0; signal = -1;
+      }
+      // 通道退出
+      else if (price < exitLowerPrev) {
+        cash += shares * price;
+        trades.push({ date: dates[i], type: '通道退出', price: price.toFixed(2), pct: ((price/entryPrice - 1)*100).toFixed(1) });
+        shares = 0; unitsHeld = 0; signal = -1;
+      }
+      // 金字塔加仓
+      else if (enablePyramid && unitsHeld < maxUnits && price >= entryPrice + 0.5 * atrVal * unitsHeld) {
+        const add = Math.floor(riskAmount / atrVal);
+        if (add > 0 && cash >= add * price) {
+          shares += add; cash -= add * price; unitsHeld++;
+          trades.push({ date: dates[i], type: `加仓(${unitsHeld})`, price: price.toFixed(2), pct: '' });
+          signal = 1;
+        }
+      }
+    }
+    // 入场
+    else {
+      if (price > upperPrev) {
+        const buy = unitSize;
+        if (cash >= buy * price) {
+          shares = buy; cash -= buy * price; unitsHeld = 1; entryPrice = price;
+          trades.push({ date: dates[i], type: '入场', price: price.toFixed(2), pct: '' });
+          signal = 1;
+        }
+      }
+    }
+
+    signals[i] = signal;
+    positions[i] = unitsHeld;
+    navs[i] = cash + shares * price;
+  }
+
+  // Fill warmup navs
+  for (let i = 0; i < warmup; i++) navs[i] = accountValue;
+
+  // Metrics
+  let peak = accountValue, mdd = 0, cumNavs = [];
+  for (let i = 0; i < n; i++) {
+    peak = Math.max(peak, navs[i]);
+    const dd = (navs[i] - peak) / peak * 100;
+    mdd = Math.min(mdd, dd);
+    cumNavs.push(navs[i] / accountValue);
+  }
+
+  const finalNav = navs[n-1] / accountValue;
+  const cumRet = (finalNav - 1) * 100;
+  const days = n - warmup;
+  const annRet = ((Math.pow(finalNav, 252/days) - 1) * 100);
+
+  // Sharpe
+  let retSum = 0, retSq = 0, retCount = 0;
+  for (let i = warmup + 1; i < n; i++) {
+    const r = (navs[i] / navs[i-1]) - 1;
+    retSum += r; retSq += r * r; retCount++;
+  }
+  const avgRet = retCount > 0 ? retSum / retCount : 0;
+  const stdRet = retCount > 0 ? Math.sqrt(retSq / retCount - avgRet * avgRet) : 0;
+  const sharpe = stdRet > 0 ? (avgRet * 252 - 0.02) / (stdRet * Math.sqrt(252)) : 0;
+
+  // Buy & Hold
+  const bhRet = (closes[n-1] / closes[warmup] - 1) * 100;
+
+  // Trade stats
+  const exits = trades.filter(t => t.type === '止损' || t.type === '通道退出');
+  const wins = exits.filter(t => parseFloat(t.pct) > 0);
+  const totalProfit = wins.reduce((s, t) => s + parseFloat(t.pct), 0);
+  const totalLoss = exits.filter(t => parseFloat(t.pct) <= 0).reduce((s, t) => s + Math.abs(parseFloat(t.pct)), 0);
+
+  return {
+    dates, closes, signals, positions, navs: cumNavs,
+    upper: upper, lower: lower, atr,
+    metrics: {
+      '累计回报率': cumRet.toFixed(2) + '%',
+      '年化收益率': annRet.toFixed(2) + '%',
+      '最大回撤': mdd.toFixed(2) + '%',
+      '夏普比率': sharpe.toFixed(4),
+      '胜率': exits.length > 0 ? (wins.length / exits.length * 100).toFixed(1) + '%' : 'N/A',
+      '盈亏比': totalLoss > 0 ? (totalProfit / totalLoss).toFixed(2) : (totalProfit > 0 ? '∞' : '0'),
+      '总交易次数': exits.length,
+      '买入持有': bhRet.toFixed(2) + '%',
+    },
+    trades
+  };
+}
+
+// ── 渲染图表 ──
+function renderCharts(ind, result) {
+  const { dates, closes } = ind;
+  const { upper, lower, signals, navs, atr } = result;
+
+  // K线 + 通道 + 信号
+  const ctx1 = document.getElementById('klineChart').getContext('2d');
+  if (klineChart) klineChart.destroy();
+
+  const labels = dates;
+  const buyPoints = [], sellPoints = [];
+  for (let i = 0; i < signals.length; i++) {
+    if (signals[i] === 1) buyPoints.push({ x: dates[i], y: closes[i] });
+    if (signals[i] === -1) sellPoints.push({ x: dates[i], y: closes[i] });
+  }
+
+  klineChart = new Chart(ctx1, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [
+        { label: '收盘价', data: closes, borderColor: '#333', backgroundColor: 'transparent', borderWidth: 0.8, pointRadius: 0 },
+        { label: '上轨', data: upper, borderColor: '#c62828', borderWidth: 0.8, borderDash: [5, 3], pointRadius: 0, fill: false },
+        { label: '下轨', data: lower, borderColor: '#2e7d32', borderWidth: 0.8, borderDash: [5, 3], pointRadius: 0, fill: false },
+        { label: '买入', data: buyPoints, backgroundColor: '#c62828', borderColor: '#c62828', pointStyle: 'triangle', pointRadius: 8, showLine: false },
+        { label: '卖出', data: sellPoints, backgroundColor: '#2e7d32', borderColor: '#2e7d32', pointStyle: 'triangle', rotation: 180, pointRadius: 8, showLine: false },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'top', labels: { boxWidth: 20, font: { size: 11 } } },
+        tooltip: {
+          callbacks: { label: ctx => `${ctx.dataset.label}: ${parseFloat(ctx.parsed.y || ctx.raw?.y).toFixed(2)}` }
+        }
+      },
+      scales: {
+        x: { ticks: { maxTicksLimit: 15, font: { size: 10 } } },
+        y: { ticks: { font: { size: 10 } } }
+      }
+    }
+  });
+
+  // 净值曲线
+  const ctx2 = document.getElementById('navChart').getContext('2d');
+  if (navChart) navChart.destroy();
+
+  const bh = closes.map(c => c / closes[0]);
+
+  navChart = new Chart(ctx2, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [
+        { label: '海龟策略', data: navs, borderColor: '#c62828', borderWidth: 1.2, backgroundColor: 'transparent', pointRadius: 0 },
+        { label: '买入持有', data: bh, borderColor: '#999', borderWidth: 0.8, borderDash: [5, 3], pointRadius: 0 },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'top', labels: { boxWidth: 20, font: { size: 11 } } },
+      },
+      scales: {
+        x: { ticks: { maxTicksLimit: 15, font: { size: 10 } } },
+        y: { ticks: { font: { size: 10 } } }
+      }
+    }
+  });
+}
+
+// ── 渲染指标 ──
+function renderMetrics(metrics) {
+  const panel = document.getElementById('metricsPanel');
+  const entries = Object.entries(metrics);
+  panel.innerHTML = entries.map(([k, v], i) => {
+    let cls = '';
+    if (k === '累计回报率' && parseFloat(v) > 0) cls = 'good';
+    if (k === '最大回撤' && parseFloat(v) < -20) cls = 'warn';
+    if (k === '夏普比率' && parseFloat(v) < 0) cls = 'warn';
+    return `<div class="metric-card ${cls}"><div class="label">${k}</div><div class="value">${v}</div></div>`;
+  }).join('');
+}
+
+// ── 渲染交易日志 ──
+function renderTrades(trades) {
+  const log = document.getElementById('tradeLog');
+  if (trades.length === 0) { log.innerHTML = '<p style="color:#999;text-align:center;padding:10px;">无交易记录</p>'; return; }
+  log.innerHTML = `<table>
+    <tr><th>日期</th><th>类型</th><th>价格</th><th>盈亏%</th></tr>
+    ${trades.map(t => {
+      const cls = t.type === '入场' || t.type.startsWith('加仓') ? 'buy' : 'sell';
+      return `<tr><td>${t.date}</td><td class="${cls}">${t.type}</td><td>${t.price}</td><td>${t.pct}</td></tr>`;
+    }).join('')}
+  </table>`;
+}
+
+// ── 主入口 ──
+async function runBacktest() {
+  const btn = document.getElementById('runBtn');
+  btn.disabled = true; btn.textContent = '⏳ 计算中...';
+
+  try {
+    const symbol = document.getElementById('stockSelect').value;
+    const params = {
+      channelPeriod: parseInt(document.getElementById('channelPeriod').value),
+      exitPeriod: parseInt(document.getElementById('exitPeriod').value),
+      atrPeriod: parseInt(document.getElementById('atrPeriod').value),
+      riskPct: parseFloat(document.getElementById('riskPct').value),
+      enablePyramid: document.getElementById('pyramidToggle').value === 'true',
+      maxUnits: 4
+    };
+
+    setStatus('正在加载数据...');
+    const raw = await loadStockData(symbol);
+    currentSymbol = symbol;
+
+    setStatus('正在计算回测...');
+    const ind = calcIndicators(raw, params);
+    const result = runBacktestEngine(raw, params);
+
+    setStatus('渲染图表...');
+    renderCharts(ind, result);
+    renderMetrics(result.metrics);
+    renderTrades(result.trades);
+
+    document.getElementById('chartTitle').textContent =
+      `${symbol} 海龟策略 — 通道(${params.channelPeriod}/${params.exitPeriod}) ATR(${params.atrPeriod}) 风险${params.riskPct}%`;
+    setStatus('✅ 回测完成');
+  } catch (err) {
+    setStatus('❌ 错误: ' + err.message);
+    console.error(err);
+  } finally {
+    btn.disabled = false; btn.textContent = '▶ 运行回测';
+  }
+}
+
+// ── 初始加载 ──
+runBacktest();
+</script>
+</body>
+</html>

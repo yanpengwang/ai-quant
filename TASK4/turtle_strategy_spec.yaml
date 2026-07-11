@@ -1,0 +1,399 @@
+# TASK4 — 海龟交易策略量化分析与回测 Spec
+# 版本: 1.0
+# 日期: 2026-07-11
+# 作者: 王艳鹏
+
+spec:
+  name: "海龟交易策略实现与回测"
+  version: "1.0"
+  objectives:
+    - "深入理解海龟交易策略的核心思想与关键优势"
+    - "掌握 Donchian 高低点通道、ATR、止损条件等核心概念"
+    - "Python 完整实现：数据加载 → 通道计算 → ATR → 信号生成 → 可视化 → 回测"
+    - "多股票、多参数对比实验，总结策略适应场景与使用心得"
+
+  # ── 阶段 1: 海龟策略理论基础 ───────────────────────────────
+
+  phase1_theory:
+    turtle_strategy:
+      origin: "1980年代，著名交易员 Richard Dennis 与 William Eckhardt 的'海龟实验'"
+      core_idea:
+        - "趋势跟踪：不预测市场方向，只跟随趋势。趋势来了就跟进去，趋势反转就退出"
+        - "机械化执行：所有入场、加仓、止损、退出规则完全量化，排除主观判断"
+        - "严格风控：通过 ATR 动态调整仓位大小，单笔风险控制在账户的 1%-2%"
+      key_advantages:
+        - "规则明确、可回测、可复现 — 所有决策由数据驱动"
+        - "截断亏损、让利润奔跑 — 通过止损控制下行风险，通过趋势跟踪捕获大行情"
+        - "跨市场通用 — 同一套规则适用于股票、期货、外汇等多种资产"
+        - "心理纪律 — 机械化规则帮助交易者克服贪婪与恐惧"
+        - "波动自适应仓位管理 — 用 ATR 自动调整头寸规模，波动大时少买，波动小时多买"
+        - "数学可证的风险控制 — 每个头寸的潜在损失被严格限定在账户的 1%"
+      four_pillars:
+        pillar1:
+          name: "要素一：入场规则"
+          desc: "价格突破 N 日通道 → 顺势入场"
+        pillar2:
+          name: "要素二：止损规则"
+          desc: "入场价 - 2N（2 倍 ATR）硬性止损"
+        pillar3:
+          name: "要素三：仓位管理 (Unit)"
+          desc: "Unit = (账户资金 × 1%) / ATR，价格波动 1 个 ATR 损失账户 1%"
+        pillar4:
+          name: "要素四：止盈离场系统"
+          desc: "海龟策略使用反向突破作为离场信号，让利润奔跑"
+        pillar5:
+          name: "要素五：风险控制"
+          desc: "海龟策略有严格的风险控制规则，止损纪律是海龟策略的生命线"
+      dual_system:
+        system1:
+          name: "系统一（中短线）"
+          entry: "价格突破 20 日最高价 → 买入"
+          exit: "价格跌破 10 日最低价 → 卖出（反向突破 10 日低点作为离场信号）"
+        system2:
+          name: "系统二（中长线）"
+          entry: "价格突破 55 日最高价 → 买入"
+          exit: "价格跌破 20 日最低价 → 卖出（反向突破 20 日低点作为离场信号）"
+      exit_philosophy:
+        name: "'让利润奔跑' (Let Profits Run)"
+        principle: "不轻易离场，跟随趋势，让盈利头寸尽可能长时间地增长"
+        pros:
+          - "能抓住大趋势，获取超额收益"
+          - "不会因过早止盈而错失大行情"
+        cons:
+          - "会回吐部分浮盈"
+          - "心理上较难接受（看着利润缩水）"
+      risk_control:
+        name: "海龟策略的五大风险控制规则"
+        note: "止损纪律是海龟策略的生命线，严格执行是长期生存的唯一保障"
+        rules:
+          rule1:
+            name: "规则一：单个市场头寸上限"
+            limit: "单个市场最多 4 个单位"
+            max_risk: "最大风险 4%"
+            desc: "在同一个市场上持有的所有头寸总和不超过 4 个 Unit"
+          rule2:
+            name: "规则二：高度相关市场合计"
+            limit: "高度相关市场合计不超过 6 个单位"
+            desc: "如中芯国际 A 股 + H 股属于高度相关市场，总头寸不超过 6 个 Unit"
+          rule3:
+            name: "规则三：同一方向所有头寸合计"
+            limit: "同一方向所有头寸合计不超过 12 个单位"
+            desc: "全账户所有多头头寸加总不超过 12 个 Unit"
+          rule4:
+            name: "规则四：账户总风险"
+            limit: "账户总风险不超过 12%"
+            desc: "所有头寸在触发止损时合计损失不超过账户资金的 12%"
+          rule5:
+            name: "规则五：触发止损必须立即执行"
+            desc: "止损信号一旦触发必须立即执行，不能犹豫"
+            importance: "心理纪律的核心 — 犹豫会让小亏变成大亏"
+
+    core_concepts:
+      donchian_channel:
+        name: "Donchian 高低点通道"
+        formula_upper: "Upper = max(high, N) — N 日最高价"
+        formula_lower: "Lower = min(low, N) — N 日最低价"
+        formula_mid: "Mid = (Upper + Lower) / 2"
+        usage:
+          - "入场信号：收盘价突破上轨 → 趋势启动"
+          - "出场信号：收盘价跌破下轨 → 趋势终结"
+          - "直观展示价格的波动范围，上轨 = 阻力位，下轨 = 支撑位"
+      atr:
+        name: "平均真实波幅 (Average True Range)"
+        formula: |
+          TR = max(
+            high_t - low_t,
+            |high_t - close_{t-1}|,
+            |low_t - close_{t-1}|
+          )
+          ATR = TR 的 N 日移动平均（通常 N=14）
+        purpose:
+          - "衡量市场波动性，ATR 越大表示波动越剧烈"
+          - "止损设置：止损价 = 入场价 - 2 × ATR"
+          - "波动自适应风控：随市场波动自动调整止损距离"
+      unit_position:
+        name: "单位 (Unit) 与仓位管理"
+        formula: "Unit = floor((账户资金 × 1%) / ATR)"
+        example: |
+          账户资金 100,000 元，1% 风险预算 = 1,000 元
+          当前 ATR = 2 元/股 → 可买 Unit = 1,000 / 2 = 500 股
+          验证：价格下跌 1 个 ATR (2元) → 损失 = 500 × 2 = 1,000 元 = 账户 1% ✓
+        advantages:
+          - "波动大时自动减仓，波动小时自动加仓"
+          - "无论市场状态如何，单笔理论最大损失恒定为账户 1%"
+          - "避免主观重仓/轻仓，符合'截断亏损'原则"
+      pyramid_addition:
+        name: "金字塔加仓 (Pyramiding)"
+        rules:
+          - step: 1
+            action: "首次入场，建立第 1 单位"
+            trigger: "通道突破信号"
+            stop: "entry_price - 2N（首单位止损）"
+          - step: 2
+            action: "加仓第 2 单位"
+            trigger: "浮盈 ≥ 0.5 × ATR 时加仓"
+            stop: "维持 entry_price - 2N"
+          - step: 3
+            action: "加仓第 3 单位"
+            trigger: "再涨 0.5 × ATR（总浮盈 ≥ 1.0 × ATR）"
+            stop: "维持 entry_price - 2N"
+          - step: 4
+            action: "加仓第 4 单位（最终）"
+            trigger: "再涨 0.5 × ATR（总浮盈 ≥ 1.5 × ATR）"
+            stop: "维持 entry_price - 2N"
+        risk_cap: "最多 4 个单位 = 最大风险敞口 4%"
+        core_logic:
+          - "在盈利时加仓（顺势而为），非亏损时摊平成本（避免放大亏损）"
+          - "让盈利头寸贡献更多收益（趋势越强，收益越大）"
+          - "控制总风险 — 风险预算先设定、严格执行"
+        forbidden: "禁止在亏损时加仓 — 不摊平成本、不放大亏损"
+      stop_loss:
+        name: "止损条件"
+        types:
+          - type: "ATR 止损 (N = 2)"
+            rule: "持仓期间，若收盘价 < entry_price - 2 × ATR，立即市价全平"
+            purpose: "硬性风控，防止单笔亏损超过 2% 账户（2 单位）"
+          - type: "通道退出（反向突破）"
+            rule: "价格跌破 M 日最低价（M=系统一10 / 系统二20）"
+            purpose: "趋势反转信号，及时离场，'让利润奔跑'避免过早止盈"
+        note: "两种止损取先触发者执行；首次入场时设 N-stop，加仓后止损抬升到 entry_price - 2N（无后撤）"
+
+    metrics:
+      - name: "累计回报 (Cumulative Return)"
+        formula: "CR = (期末净值 - 期初净值) / 期初净值 × 100%"
+      - name: "最大回撤 (MDD)"
+        formula: "MDD = max((P_t - P_peak) / P_peak), 对所有 t"
+      - name: "夏普比率 (Sharpe Ratio)"
+        formula: "Sharpe = (R_p - R_f) / σ_p，R_f = 0.02（无风险利率 2%）"
+      - name: "年化收益率 (Annualized Return)"
+        formula: "AR = (1 + CR)^(252/N) - 1"
+      - name: "胜率 (Win Rate)"
+        formula: "WR = 盈利交易次数 / 总交易次数 × 100%"
+      - name: "盈亏比 (Profit Factor)"
+        formula: "PF = 总盈利 / 总亏损"
+      - name: "买入持有基准 (Buy & Hold)"
+        formula: "同期简单持有策略收益，作为策略基准对比"
+
+  # ── 阶段 2: 数据（复用 TASK3） ────────────────────────────
+
+  phase2_data:
+    source: "../TASK3/data/standard/{symbol}/1d.parquet"
+    note: "复用 TASK3 已做前复权处理的标准化数据，不重新拉取"
+    stocks:
+      - symbol: "002594.SZ"
+        name: "比亚迪 (A 股)"
+        currency: "CNY"
+        rows: 1818
+        date_range: "2019-01-02 ~ 2026-07-03"
+
+      - symbol: "600900.SH"
+        name: "长江电力 (A 股)"
+        currency: "CNY"
+        rows: 1807
+        date_range: "2019-01-02 ~ 2026-07-03"
+
+      - symbol: "688981.SH"
+        name: "中芯国际 (A 股)"
+        currency: "CNY"
+        rows: 1440
+        date_range: "2020-07-16 ~ 2026-07-03"
+
+      - symbol: "688099.SH"
+        name: "晶晨股份 (A 股)"
+        currency: "CNY"
+        rows: null
+        date_range: "2019-08-08 ~ 2026-07-03"
+
+      - symbol: "00981.HK"
+        name: "中芯国际 (H 股)"
+        currency: "HKD"
+        rows: 1918
+        date_range: "2018-09-14 ~ 2026-07-03"
+
+      - symbol: "01211.HK"
+        name: "比亚迪 (H 股)"
+        currency: "HKD"
+        rows: 1918
+        date_range: "2018-09-14 ~ 2026-07-03"
+
+    required_columns: ["trade_date", "open", "high", "low", "close", "volume"]
+    price_column: "close"
+
+  # ── 阶段 3: Python 实现（Jupyter Notebook） ───────────────
+
+  phase3_implementation:
+    format: "Jupyter Notebook (.ipynb)"
+    runtime: "/opt/anaconda3/bin/python3"
+    libraries: ["pandas", "numpy", "matplotlib", "pyarrow"]
+
+    step1_load:
+      description: "从 TASK3/data/standard/ 加载指定股票的 Parquet 数据"
+      output: "DataFrame: trade_date, open, high, low, close, volume"
+
+    step2_donchian:
+      description: "计算 Donchian 高低点通道"
+      parameters:
+        channel_period:
+          default: 20
+          range: [10, 20, 55]
+          description: "通道计算周期（交易日）"
+        exit_period:
+          default: 10
+          range: [10, 20]
+          description: "退出通道周期"
+      calculation: |
+        df['upper_channel'] = df['high'].rolling(channel_period).max()
+        df['lower_channel'] = df['low'].rolling(channel_period).min()
+        df['mid_channel']   = (df['upper_channel'] + df['lower_channel']) / 2
+        df['exit_lower']    = df['low'].rolling(exit_period).min()
+
+    step3_atr:
+      description: "计算 ATR (Average True Range)"
+      parameters:
+        atr_period:
+          default: 14
+          description: "ATR 计算周期"
+      calculation: |
+        df['tr'] = max(high-low, |high-prev_close|, |low-prev_close|)
+        df['atr'] = df['tr'].rolling(atr_period).mean()
+
+    step4_signals:
+      description: "生成海龟策略买卖信号"
+      rules:
+        entry:
+          condition: "close > upper_channel.shift(1) 且 当前无持仓"
+          signal: "买入 (+1)"
+        exit_channel:
+          condition: "close < exit_lower.shift(1) 且 当前持仓"
+          signal: "卖出 (-1)"
+        exit_stop:
+          condition: "close < entry_price - 2 * atr 且 当前持仓"
+          signal: "止损卖出 (-1)"
+      output_fields:
+        - "signal: 1(买入) / -1(卖出) / 0(持有)"
+        - "position: 1(持仓) / 0(空仓)"
+        - "entry_price: 入场价格"
+        - "exit_reason: 'channel'(通道退出) / 'stop'(止损退出)"
+
+    step5_visualization:
+      description: "绘制策略可视化图表"
+      charts:
+        chart1:
+          title: "股价与 Donchian 通道"
+          elements:
+            - "收盘价折线 (黑色)"
+            - "上通道 upper_channel (红色虚线)"
+            - "下通道 lower_channel (绿色虚线)"
+            - "中轨 mid_channel (灰色点线)"
+            - "买入信号标记: 红色▲"
+            - "卖出信号标记: 绿色▼"
+            - "止损信号标记: 蓝色◆"
+          format: "PNG, 300 dpi"
+
+        chart2:
+          title: "ATR 波动率指标"
+          elements:
+            - "ATR 折线 (蓝色)"
+            - "标示超高波动区间"
+          format: "PNG, 300 dpi"
+
+        chart3:
+          title: "策略净值曲线 vs 买入持有"
+          elements:
+            - "策略累计净值 (红色)"
+            - "买入持有净值 (灰色虚线)"
+            - "最大回撤区间阴影标注"
+          format: "PNG, 300 dpi"
+
+    step6_backtest:
+      description: "模拟交易并计算量化指标"
+      assumptions:
+        - "初始资金: 100,000"
+        - "风险预算: 1% 账户资金 = 1,000 元/笔"
+        - "仓位模型: Unit = floor((账户资金 × 1%) / ATR)，按 Unit 加仓最多 4 个 Unit"
+        - "加仓规则: 浮盈每增加 0.5 × ATR，加 1 个 Unit（最多 4 个 Unit = 4% 风险敞口）"
+        - "加仓止损: 加仓后止损点不后撤，仍维持 entry_price - 2N"
+        - "禁止在亏损时加仓（不摊平成本、不放大亏损）"
+        - "风险控制规则（5 条）：单市场 ≤4 Unit、高度相关市场 ≤6 Unit、同一方向 ≤12 Unit、账户总风险 ≤12%、止损必须立即执行"
+        - "交易成本: 万分之三（0.03%）佣金 + 千分之一（0.1%）印花税（A股卖出时）"
+        - "H 股成本: 万分之五（0.05%）佣金 + 千分之一（0.1%）印花税 + 0.005% 交易征费"
+        - "滑点: 万分之二（0.02%）"
+        - "单边做多，不可做空"
+        - "信号以收盘价确认，次日开盘价执行"
+      output_metrics:
+        - "累计回报率 (%)"
+        - "年化收益率 (%)"
+        - "最大回撤 (%)"
+        - "夏普比率"
+        - "胜率 (%)"
+        - "盈亏比 (Profit Factor)"
+        - "总交易次数"
+        - "平均持仓天数"
+        - "平均每次加仓的 Unit 数"
+        - "买入持有策略收益率 (Buy & Hold) — 基准对比"
+
+  # ── 阶段 4: 多场景对比实验 ────────────────────────────────
+
+  phase4_experiments:
+    description: "遍历不同股票 × 不同通道周期组合"
+    stock_list:
+      - "002594.SZ (比亚迪A)"
+      - "600900.SH (长江电力)"
+      - "688981.SH (中芯国际A)"
+      - "688099.SH (晶晨股份)"
+      - "00981.HK (中芯国际H)"
+      - "01211.HK (比亚迪H)"
+    param_combinations:
+      - channel_period: [10, 20, 55]
+        exit_period: [10, 20]
+        label: "系统一(20,10) / 系统二(55,20) / 短周期(10,10) 等变体"
+    output:
+      - "TASK4/backtest_matrix.csv — 全量对比矩阵"
+      - "TASK4/backtest_matrix.html — 热力图交互页面"
+      - "TASK4/backtest_best.html — 最佳策略详情页"
+
+  # ── 阶段 5: 总结 ──────────────────────────────────────────
+
+  phase5_summary:
+    topics:
+      - "海龟策略在趋势股 vs 震荡股上的表现差异"
+      - "通道周期长短对交易频率和收益的影响"
+      - "ATR 止损 vs 通道退出（让利润奔跑）的各自作用"
+      - "Unit 仓位管理在波动率变化时的自适应效果"
+      - "金字塔加仓：盈利时顺势加仓 vs 亏损时死扛摊平成本的对比"
+      - "五级风险控制（单市场/相关市场/同向/总风险/立即执行）如何在回测中体现"
+      - "A 股 vs H 股表现对比（同一公司不同市场）"
+      - "策略局限性：震荡市频繁假突破、大幅回撤期长"
+      - "改进方向：加入趋势过滤（ADX）、成交量确认、动态参数调整"
+      - "使用心得与感悟"
+
+  # ── 阶段 6: 交互式网站 ────────────────────────────────────
+
+  phase6_web:
+    description: "海龟策略交互实验工具"
+    output: "TASK4/turtle_lab.html"
+    features:
+      - "股票选择下拉框（6只股票）"
+      - "通道周期滑块 (10-60)"
+      - "退出周期滑块 (5-30)"
+      - "ATR 周期滑块 (7-30)"
+      - "风险预算滑块 (0.5%-3%)，实时显示 Unit 计算"
+      - "加仓开关 (启用金字塔加仓 / 简化全仓)"
+      - "实时重算信号和回测指标"
+      - "K 线图 + Donchian 通道 + 买卖信号标记"
+      - "净值曲线 + 指标面板"
+    tech: "纯静态 HTML + Chart.js（本地 lib/），无网络依赖，支持 file:// 打开"
+
+  # ── 最终交付物 ────────────────────────────────────────────
+
+  deliverables:
+    - path: "TASK4/turtle_strategy.ipynb"
+      description: "Jupyter Notebook，含完整 Python 代码、图表、Markdown 说明"
+    - path: "TASK4/王艳鹏 TASK4.pdf"
+      description: "PDF 报告：宋体五号、1.5倍行距、两端对齐、图表有编号和解读"
+    - path: "TASK4/turtle_lab.html"
+      description: "交互式回测实验工具"
+    - path: "TASK4/TASK4_report_charts/"
+      description: "报告用图表 PNG 文件"
+    - path: "TASK4/backtest_matrix.csv"
+      description: "多场景对比数据"
