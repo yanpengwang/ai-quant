@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>海龟策略交互实验工具 — TASK4</title>
 <script src="lib/chart.umd.min.js"></script>
+<script src="data_inline.js"></script>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif; background: #f5f7fa; color: #333; }
@@ -118,15 +119,14 @@ let klineChart = null, navChart = null;
   });
 });
 
-// ── 数据加载 ──
-async function loadStockData(symbol) {
+// ── 数据加载（已内联，无 fetch 依赖）──
+function loadStockData(symbol) {
   if (stockData[symbol]) return stockData[symbol];
+  if (!DATA_MAP[symbol]) throw new Error(`未找到 ${symbol} 的数据`);
   setStatus(`正在加载 ${symbol} 数据...`);
-  const resp = await fetch(`data/${symbol}.json`);
-  const data = await resp.json();
-  stockData[symbol] = data;
-  setStatus(`${symbol} 数据加载完成 (${data.length}行)`);
-  return data;
+  stockData[symbol] = DATA_MAP[symbol];
+  setStatus(`${symbol} 数据就绪 (${DATA_MAP[symbol].length}行)`);
+  return stockData[symbol];
 }
 
 function setStatus(msg) {
@@ -408,7 +408,7 @@ function renderTrades(trades) {
 }
 
 // ── 主入口 ──
-async function runBacktest() {
+function runBacktest() {
   const btn = document.getElementById('runBtn');
   btn.disabled = true; btn.textContent = '⏳ 计算中...';
 
@@ -424,7 +424,7 @@ async function runBacktest() {
     };
 
     setStatus('正在加载数据...');
-    const raw = await loadStockData(symbol);
+    const raw = loadStockData(symbol);
     currentSymbol = symbol;
 
     setStatus('正在计算回测...');
